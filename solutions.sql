@@ -1,112 +1,149 @@
--- Display for each store its store ID, city, and country
-USE sakila;
-
-DESCRIBE store;
-DESCRIBE city;
-DESCRIBE country;
-
+USE sakila; 
+-- How many copies of the film "Hunchback Impossible" exist in the inventory system?
 SELECT 
-    s.store_id, 
-    c.city, 
-    co.country
+    COUNT(*) AS copies_in_inventory
 FROM 
-    store s
+    inventory i
 JOIN 
-    city c ON s.address_id = c.city_id
-JOIN 
-    country co ON c.country_id = co.country_id;
+    film f ON i.film_id = f.film_id
+WHERE 
+    f.title = 'Hunchback Impossible';
 
--- Display how much business, in dollars, each store brought in
+-- List all films whose length is longer than the average length of all films.
 SELECT 
-    s.store_id, 
-    SUM(p.amount) AS total_revenue
+    title, length
 FROM 
-    store s
-JOIN 
-    staff st ON s.store_id = st.store_id
-JOIN 
-    payment p ON st.staff_id = p.staff_id
-GROUP BY 
-    s.store_id;
+    film
+WHERE 
+    length > (SELECT AVG(length) FROM film);
 
--- What is the average running time of films by category?
+-- Use subqueries to display all actors who appear in the film "Alone Trip".
 SELECT 
-    c.name AS category, 
-    AVG(f.length) AS avg_running_time
+    first_name, last_name
 FROM 
-    film f
-JOIN 
-    film_category fc ON f.film_id = fc.film_id
-JOIN 
-    category c ON fc.category_id = c.category_id
-GROUP BY 
-    c.name;
+    actor
+WHERE 
+    actor_id IN (
+        SELECT 
+            actor_id 
+        FROM 
+            film_actor 
+        WHERE 
+            film_id = (SELECT film_id FROM film WHERE title = 'Alone Trip')
+    );
 
--- Which film categories are longest?
+-- Identify all movies categorized as family films.
 SELECT 
-    c.name AS category, 
-    AVG(f.length) AS avg_running_time
+    f.title
 FROM 
     film f
 JOIN 
     film_category fc ON f.film_id = fc.film_id
 JOIN 
     category c ON fc.category_id = c.category_id
+WHERE 
+    c.name = 'Family';
+    
+-- Get the name and email from customers from Canada using subqueries.
+SELECT 
+    first_name, last_name, email
+FROM 
+    customer
+WHERE 
+    address_id IN (
+        SELECT 
+            address_id 
+        FROM 
+            address 
+        WHERE 
+            city_id IN (
+                SELECT 
+                    city_id 
+                FROM 
+                    city 
+                WHERE 
+                    country_id = (SELECT country_id FROM country WHERE country = 'Canada')
+            )
+    );
+
+-- Get the name and email of customers from Canada using joins.
+SELECT 
+    c.first_name, c.last_name, c.email
+FROM 
+    customer c
+JOIN 
+    address a ON c.address_id = a.address_id
+JOIN 
+    city ci ON a.city_id = ci.city_id
+JOIN 
+    country co ON ci.country_id = co.country_id
+WHERE 
+    co.country = 'Canada';
+
+-- Which are films starred by the most prolific actor?
+SELECT 
+    actor_id, COUNT(*) AS film_count
+FROM 
+    film_actor
 GROUP BY 
-    c.name
+    actor_id
 ORDER BY 
-    avg_running_time DESC;
+    film_count DESC
+LIMIT 1;
 
--- Display the most frequently rented movies in descending order
 SELECT 
-    f.title, 
-    COUNT(r.rental_id) AS rental_count
+    title
+FROM 
+    film
+WHERE 
+    film_id IN (
+        SELECT 
+            film_id
+        FROM 
+            film_actor
+        WHERE 
+            actor_id = (SELECT actor_id FROM film_actor GROUP BY actor_id ORDER BY COUNT(*) DESC LIMIT 1)
+    );
+
+-- Films rented by the most profitable customer.
+SELECT 
+    customer_id, SUM(amount) AS total_spent
+FROM 
+    payment
+GROUP BY 
+    customer_id
+ORDER BY 
+    total_spent DESC
+LIMIT 1;
+
+SELECT 
+    f.title
 FROM 
     rental r
 JOIN 
     inventory i ON r.inventory_id = i.inventory_id
 JOIN 
     film f ON i.film_id = f.film_id
-GROUP BY 
-    f.title
-ORDER BY 
-    rental_count DESC;
-
--- List the top five genres in gross revenue in descending order
-SELECT 
-    c.name AS category, 
-    SUM(p.amount) AS gross_revenue
-FROM 
-    payment p
-JOIN 
-    rental r ON p.rental_id = r.rental_id
-JOIN 
-    inventory i ON r.inventory_id = i.inventory_id
-JOIN 
-    film_category fc ON i.film_id = fc.film_id
-JOIN 
-    category c ON fc.category_id = c.category_id
-GROUP BY 
-    c.name
-ORDER BY 
-    gross_revenue DESC
-LIMIT 5;
-
--- Is "Academy Dinosaur" available for rent from Store 1?
-SELECT 
-    f.title, 
-    s.store_id, 
-    CASE 
-        WHEN i.inventory_id IS NOT NULL THEN 'Yes' 
-        ELSE 'No' 
-    END AS available_for_rent
-FROM 
-    film f
-JOIN 
-    inventory i ON f.film_id = i.film_id
-JOIN 
-    store s ON i.store_id = s.store_id
 WHERE 
-    f.title = 'Academy Dinosaur' 
-    AND s.store_id = 1;
+    r.customer_id = (
+        SELECT 
+            customer_id 
+        FROM 
+            payment
+        GROUP BY 
+            customer_id
+        ORDER BY 
+            SUM(amount) DESC
+        LIMIT 1
+    );
 
+-- Get the customer_id and the total_amount_spent of clients who spent more than the average total amount spent by all clients.
+
+SELECT 
+    customer_id, SUM(amount) AS total_amount_spent
+FROM 
+    payment
+GROUP BY 
+    customer_id
+HAVING 
+    total_amount_spent > (SELECT AVG(total_spent) FROM (SELECT SUM(amount) AS total_spent FROM payment GROUP BY customer_id) AS avg_spent);
